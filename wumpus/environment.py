@@ -176,7 +176,7 @@ class Environment(object):
         elif tile == 'w':
             return [0,0,0,0,0]
         elif tile == 'd':
-            return [-1,-1,-1,-1,-1]
+            return [10,10,10,10,10]
 
     def movement(self, action):
         '''
@@ -188,7 +188,7 @@ class Environment(object):
             if not self.spritex <=11:
                 self.spritex -= 50
                 self.agent_pos -= 1
-                if self.generate_state[self.agent_pos] == [1,1,1,1,1]:
+                if self.generate_state(self.agent_pos) == [1,1,1,1,1]:
                     self.reset()
                     return
             else:
@@ -198,7 +198,7 @@ class Environment(object):
             if not self.spritex >=460:
                 self.spritex += 50
                 self.agent_pos += 1
-                if self.generate_state[self.agent_pos] == [1,1,1,1,1]:
+                if self.generate_state(self.agent_pos) == [1,1,1,1,1]:
                     self.reset()
                     return
             else:
@@ -208,7 +208,7 @@ class Environment(object):
             if not self.spritey <=11:
                 self.spritey -= 50
                 self.agent_pos -= 10
-                if self.generate_state[self.agent_pos] == [1,1,1,1,1]:
+                if self.generate_state(self.agent_pos) == [1,1,1,1,1]:
                     self.reset()
                     return
             else:
@@ -218,19 +218,11 @@ class Environment(object):
             if not self.spritey >= 460:
                 self.spritey += 50
                 self.agent_pos += 10
-                if self.generate_state[self.agent_pos] == [1,1,1,1,1]:
+                if self.generate_state(self.agent_pos) == [1,1,1,1,1]:
                     self.reset()
                     return
             else:
                 return
-
-    def reset(self):
-        self.agent_pos = 90
-        self.spritey = 461
-        self.spritex = 11
-        self.wumpus = 1
-        self.arrow = 1
-        return [0,0,0,0,0]
 
     def step(self, action):
         '''
@@ -336,13 +328,26 @@ class Environment(object):
                     return self.generate_state(self.agent_pos), -10, 0
             else:
                 return self.generate_state(self.agent_pos), -1, 0
+      
 
+    def reset(self):
+        self.agent_pos = 90
+        self.spritey = 461
+        self.spritex = 11
+        self.wumpus = 1
+        self.arrow = 1
+        return [0,0,0,0,0]
+
+    
     def run(self):
         '''
             Main loop
         '''
         # variable to control main loop
         running = True
+
+        #initial state
+        state = self.generate_state(self.agent_pos)
 
         # main loop
         while running:
@@ -352,8 +357,13 @@ class Environment(object):
             self.draw_actor(self.spritex, self.spritey)
             pygame.display.flip()
             self.screen.blit(self.background, (0, 0))
-            action = randint(0, 5) # select random action
-            #self.movement(self.action_space[action])
+            
+            probs = policy[tuple(state)] / policy[tuple(state)].sum()
+            action = np.random.choice(5, 1, p=probs)[0]
+            print(state, probs, action)
+            self.movement(self.action_space[action])
+            state,_,_ = self.step(action)
+            
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -396,66 +406,39 @@ class Environment(object):
 
             pygame.display.update()
 
-
-
-
-# agent
-class Sarsa():
-
-    def __init__(self, alpha, epsilon, gamma):
-        '''
-            alpha: step size (0,1]
-            epsilon: greedy probability small>0
-            gamma: discount factor
-            Q: estimated action value for state-action pair. It uses a defaultdict whose key is observation(state) 
-               and columns are the possible actions with the cells indicating the estimated action value at each time step.
-        '''
-        self.alpha = alpha
-        self.epsilon = epsilon
-        self.gamma = gamma
-        self.Q = defaultdict(lambda: np.random.randn(5))
-
-    def greedy_policy(self, state):
-        '''
-            returns action from state using epsilon greedy policy
-            derived from Q
-        '''
-        prob = np.random.random()
-        if prob <= self.epsilon:
-            return np.random.randint(5)
-        else:
-            return np.argmax(self.Q[state])
-
-    def play(self):
-        score = np.zeros(episode_num)
-        for episode in range(episode_num):
-            
-            state = env.reset()
-            action = self.greedy_policy(tuple(state))
-            
-            for step in itertools.count():
-                observation, reward, done = env.step(action)
-                #print(action, observation, reward, done)
-                next_action = self.greedy_policy(tuple(observation))
-                self.Q[tuple(state)][action] += self.alpha * (reward + (self.gamma * self.Q[tuple(observation)][action]) - self.Q[tuple(state)][action])
-
-                state = observation
-                action = next_action
-
-                if done:
-                    score[episode] = step
-                    break
-        return self.Q,score
-
-alpha = 0.1
-epsilon = 0.75
-gamma = 0.8
-episode_num = 5000
-
-
 env = Environment()
-agent = Sarsa(alpha, epsilon, gamma)
-q, score = agent.play()
-print(dict(q))
-print(np.amax(score))
+
+policy = {(0, 0, 0, 0, 0): np.array([4962, 3980, 4094, 4338, 3748]),
+          (1, 1, 0, 1, 0): np.array([5044, 4143, 4882, 5561, 4037]),
+          (1, 1, 0, 0, 1): np.array([2923, 4777, 3152, 5206, 6184]),
+          (0, 0, 1, 1, 1): np.array([3013, 5621, 6235, 6119, 4042]),
+          (1, 0, 1, 1, 0): np.array([4571, 4127, 4150, 5899, 3500]),
+          (1, 0, 1, 0, 0): np.array([3544, 4545, 6070, 4473, 5334]),
+          (0, 0, 1, 1, 0): np.array([4152, 5239, 3178, 3375, 3796]),
+          (1, 0, 0, 1, 1): np.array([3686, 3772, 3869, 4263, 3741]),
+          (0, 1, 0, 1, 0): np.array([4904, 4702, 3011, 4433, 3692]),
+          (1, 1, 0, 1, 1): np.array([3517, 5904, 4059, 3891, 4258]),
+          (1, 0, 0, 0, 1): np.array([2757, 4701, 5375, 4335, 5193]),
+          (0, 1, 1, 1, 1): np.array([6221, 4326, 4345, 6279, 5728]),
+          (0, 1, 0, 0, 1): np.array([2482, 3494, 3986, 3541, 2971]),
+          (1, 0, 1, 0, 1): np.array([4447, 3895, 5800, 2978, 3923]),
+          (1, 1, 1, 1, 0): np.array([3200, 5191, 5119, 5758, 4878]),
+          (1, 0, 1, 1, 1): np.array([2141, 5157, 3076, 3995, 5675]),
+          (0, 0, 0, 1, 0): np.array([4244, 5294, 3600, 2870, 4619]),
+          (1, 0, 0, 0, 0): np.array([5369, 3228, 5558, 4385, 5348]),
+          (0, 1, 0, 1, 1): np.array([4862, 6129, 4250, 4897, 5020]),
+          (0, 0, 0, 0, 1): np.array([3639, 5988, 4249, 4008, 3762]),
+          (1, 1, 0, 0, 0): np.array([2863, 4114, 4529, 4692, 5379]),
+          (1, 0, 0, 1, 0): np.array([4542, 4240, 3759, 4087, 4045]),
+          (0, 0, 1, 0, 0): np.array([5096, 4522, 6201, 2011, 2988]),
+          (0, 1, 1, 1, 0): np.array([5267, 4048, 3041, 4688, 4238]),
+          (0, 0, 0, 1, 1): np.array([6316, 2809, 5275, 4189, 5167]),
+          (1, 1, 1, 0, 1): np.array([3190, 4649, 6308, 5155, 4508]),
+          (1, 1, 1, 1, 1): np.array([4790, 2727, 5252, 4239, 3647]),
+          (1, 1, 1, 0, 0): np.array([5413, 5106, 4137, 5223, 5269]),
+          (0, 0, 1, 0, 1): np.array([2864, 3881, 2993, 4085, 2099]),
+          (0, 1, 0, 0, 0): np.array([5101, 4836, 3663, 3955, 4287]),
+          (0, 1, 1, 0, 1): np.array([5978, 4097, 4265, 5833, 2809]),
+          (0, 1, 1, 0, 0): np.array([3531, 4699, 5186, 5627, 4825])}
+
 env.run()
